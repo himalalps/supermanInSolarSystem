@@ -1,6 +1,8 @@
 # supermanInSolarSystem
 a webpage with a superman in the solar system using three.js
 
+The final webpage is at `./final/final.html`.
+
 ## functions
 
 1. scroll to zoom in and zoom out
