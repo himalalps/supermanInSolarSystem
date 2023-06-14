@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>final - created by 汤皓宇</title>
+    <script type="text/javascript" src="../libs/three.js"></script>
+    <script type="text/javascript" src="../libs/stats.js"></script>
+    <script type="text/javascript" src="../libs/dat.gui.js"></script>
+    <script type="text/javascript" src="../libs/physi.js"></script>
+    <script type="text/javascript" src="../libs/chroma.js"></script>
+    <script type="text/javascript" src="../libs/OrbitControls.js"></script>
+    <style>
+        body {
+            /* set margin to 0 and overflow to hidden, to go fullscreen */
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<!-- Div which shows fps-->
+<div id="Stats-output"></div>
+<!-- Div which will hold the Output -->
+<div id="WebGL-output"></div>
+<script type="text/javascript">
+
+    'use strict';
+
+    let scale = chroma.scale(['green', 'white', 'red', 'yellow']);
+
+    Physijs.scripts.worker = '../libs/physijs_worker.js';
+    Physijs.scripts.ammo = '../libs/ammo.js';
+
+    let camera, scene, renderer, stats, pointLight, cloud;
+    let sun, mercury, venus, earth, moon, mars, jupiter, saturn, uranus, neptune, belt;
+    let mercuryParent, venusParent, earthParent, moonParent, marsParent, jupiterParent, saturnParent, uranusParent,
+        neptuneParent;
+    let head, body, lArm, rArm, lLeg, rLeg, person;
+    let orbitControls, controls, move, time;
+    let cameraMode = 0;
+
+    function init() {
+        initStats();
+        initScene();
+        initCamera();
+        initRenderer();
+        initLight();
+        createPerson();
+        createSolar();
+        movePerson(0, 500, 0);
+        initCloud();
+        initControls();
+        render();
+    }
+
+    function initStats() {
+        stats = new Stats();
+        stats.setMode(0); // 0: fps, 1: ms
+        stats.domElement.style.position = 'absolute';
+        stats.domElement.style.left = '0px';
+        stats.domElement.style.top = '1px';
+        document.getElementById("Stats-output").appendChild(stats.domElement);
+    }
+
+    function initScene() {
+        scene = new Physijs.Scene({fixedTimeStep: 1 / 60});
+    }
+
+    function initCamera() {
+        camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 1, 10000);
+        camera.position.set(0, 3000, 2000);
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+        scene.add(camera);
+    }
+
+    function initRenderer() {
+        renderer = new THREE.WebGLRenderer({antialias: true, logarithmicDepthBuffer: true});
+        renderer.setClearColor(new THREE.Color(0x000000));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMapEnabled = true;
+        document.getElementById('WebGL-output').appendChild(renderer.domElement);
+    }
+
+    function initLight() {
+        pointLight = new THREE.PointLight(0xfaece5, 1.25);
+        pointLight.position.set(0, 0, 0);
+        pointLight.castShadow = true;
+        pointLight.shadowMapDebug = true;
+        pointLight.shadowCameraBottom = 5000;
+        pointLight.shadowCameraTop = 5000;
+        pointLight.shadowCameraFov = 5000;
+        pointLight.shadowCameraLeft = 5000;
+        pointLight.shadowCameraRight = 5000;
+        pointLight.shadowCameraFar = 5000;
+        pointLight.shadowCameraNear = 20;
+        scene.add(pointLight);
+
+        const ambientLight = new THREE.AmbientLight(0x2f2f2f, 0.00001);
+        scene.add(ambientLight);
+    }
+
+    function initCloud() {
+        const geom = new THREE.Geometry();
+        const material = new THREE.PointCloudMaterial({
+            size: 1,
+            transparent: false,
+            opacity: 1,
+            vertexColors: false,
+            sizeAttenuation: true,
+            color: 0xffffff
+        });
+
+        const range = 25000;
+        for (let i = 0; i < 2500; i++) {
+            let particle = new THREE.Vector3(Math.random() * range - range / 2, Math.random() * range - range / 2, Math.random() * range - range / 2);
+            geom.vertices.push(particle);
+        }
+
+        cloud = new THREE.PointCloud(geom, material);
+
+        scene.add(cloud);
+    }
+
+    function initControls() {
+        controls = new function () {
+            this.movingSpeed = 1;
+            this.stepSpeed = 0.2;
+            this.switchCamera = function () {
+                if (!cameraMode) {
+                    cameraMode = 1
+
+                } else {
+                    cameraMode = 0;
+                    camera.position.set(0, 3000, 2000);
+                }
+            }
+        };
+
+        let gui = new dat.GUI();
+        gui.add(controls, 'movingSpeed', 0, 10);
+        gui.add(controls, 'stepSpeed', 0, 1);
+        gui.add(controls, 'switchCamera');
+
+        orbitControls = new THREE.OrbitControls(camera);
+        orbitControls.autoRotate = false;
+
+        move = controls.stepSpeed;
+        time = controls.movingSpeed / 6;
+    }
+
+    function createHead() {
+        const headGeometry = new THREE.SphereGeometry(1.5, 40, 40);
+        const headMaterial = Physijs.createMaterial(new THREE.MeshPhongMaterial({color: 0xffd0d5}), .01, 1);
+        head = new Physijs.BoxMesh(headGeometry, headMaterial, 1);
+        head.position.set(0, 8.5, 0);
+        head.castShadow = true;
+        scene.add(head);
+    }
+
+    function createArms() {
+        const armGeometry = new THREE.BoxGeometry(1, 3, 1, 40, 40, 40);
+        const armMaterial = Physijs.createMaterial(new THREE.MeshLambertMaterial({color: 0xfffaf0}), .01, 1);
+        lArm = new Physijs.BoxMesh(armGeometry, armMaterial, 1);
+        rArm = new Physijs.BoxMesh(armGeometry, armMaterial, 1);
+        lArm.position.set(2, 5.5, 0);
+        lArm.castShadow = true;
+        lArm.rotation.z = Math.PI / 5;
+        rArm.position.set(-2, 5.5, 0);
+        rArm.castShadow = true;
+        rArm.rotation.z = -Math.PI / 5;
+        scene.add(lArm);
+        scene.add(rArm);
+    }
+
+    function createLegs() {
+        const legGeometry = new THREE.BoxGeometry(1, 2.5, 1, 40, 40, 40);
+        const legMaterial = Physijs.createMaterial(new THREE.MeshLambertMaterial({color: 0x222222}), .01, 1);
+        lLeg = new Physijs.BoxMesh(legGeometry, legMaterial, 1);
+        rLeg = new Physijs.BoxMesh(legGeometry, legMaterial, 1);
+        lLeg.position.set(1, 1, 0);
+        lLeg.castShadow = true;
+        lLeg.rotation.z = Math.PI / 20;
+        rLeg.position.set(-1, 1, 0);
+        rLeg.castShadow = true;
+        rLeg.rotation.z = -Math.PI / 20;
+        scene.add(lLeg);
+        scene.add(rLeg);
+    }
+
+    function createPerson() {
+        person = {};
+
+        createHead();
+        createArms();
+        createLegs();
+
+        const bodyGeometry = new THREE.BoxGeometry(3, 5, 1.5, 40, 40, 40);
+        const bodyMaterial = Physijs.createMaterial(new THREE.MeshPhongMaterial({color: 0xff0000}), .01, 1);
+        body = new Physijs.BoxMesh(bodyGeometry, bodyMaterial, 0);
+        body.position.set(0, 4.5, 0);
+        body.castShadow = true;
+        scene.add(body);
+
+
+        let headConstraint = createConstraints(head, body, new THREE.Vector3(0, 7, 0));
+        scene.add(headConstraint);
+        let lArmConstraint = createConstraints(lArm, body, new THREE.Vector3(1.5, 6, 0));
+        scene.add(lArmConstraint);
+        let rArmConstraint = createConstraints(rArm, body, new THREE.Vector3(-1.5, 6, 0));
+        scene.add(rArmConstraint);
+        let lLegConstraint = createConstraints(lLeg, body, new THREE.Vector3(1, 2, 0));
+        scene.add(lLegConstraint);
+        let rLegConstraint = createConstraints(rLeg, body, new THREE.Vector3(-1, 2, 0));
+        scene.add(rLegConstraint);
+
+        headConstraint.setAngularLowerLimit({x: 0, y: 0, z: 0});
+        headConstraint.setAngularUpperLimit({x: 0, y: 0, z: 0});
+        lArmConstraint.setAngularLowerLimit({x: 0, y: 0, z: 0});
+        lArmConstraint.setAngularUpperLimit({x: 0, y: 0, z: 0});
+        rArmConstraint.setAngularLowerLimit({x: 0, y: 0, z: 0});
+        rArmConstraint.setAngularUpperLimit({x: 0, y: 0, z: 0});
+        lLegConstraint.setAngularLowerLimit({x: 0, y: 0, z: 0});
+        lLegConstraint.setAngularUpperLimit({x: 0.1, y: 0.1, z: 0});
+        rLegConstraint.setAngularLowerLimit({x: 0, y: 0, z: 0});
+        rLegConstraint.setAngularUpperLimit({x: 0.1, y: 0.1, z: 0});
+
+        person.position = body.position;
+        person.headConstraint = headConstraint;
+        person.lArmConstraint = lArmConstraint;
+        person.rArmConstraint = rArmConstraint;
+        person.lLegConstraint = lLegConstraint;
+        person.rLegConstraint = rLegConstraint;
+    }
+
+    function createConstraints(part, body, position) {
+        return new Physijs.DOFConstraint(part, body, position);
+    }
+
+    function movePerson(x, y, z) {
+
+        if (true) {
+            head.position.x += x;
+            body.position.x += x;
+            lArm.position.x += x;
+            rArm.position.x += x;
+            lLeg.position.x += x;
+            rLeg.position.x += x;
+        }
+
+        if (true) {
+            head.position.y += y;
+            body.position.y += y;
+            lArm.position.y += y;
+            rArm.position.y += y;
+            lLeg.position.y += y;
+            rLeg.position.y += y;
+        }
+
+        if (true) {
+            head.position.z += z;
+            body.position.z += z;
+            lArm.position.z += z;
+            rArm.position.z += z;
+            lLeg.position.z += z;
+            rLeg.position.z += z;
+        }
+
+    }
+
+    function createSun() {
+        const sunGeometry = new THREE.SphereGeometry(200, 80, 80);
+        const sunMaterial = new THREE.MeshBasicMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/sun_bg.jpg')});
+        sun = new THREE.Mesh(sunGeometry, sunMaterial);
+        sun.position.set(0, 0, 0);
+        scene.add(sun);
+    }
+
+    function createMercury() {
+        const radius = 300;
+        const mercuryGeometry = new THREE.SphereGeometry(10, 80, 80);
+        const mercuryMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/mercury_bg.jpg')});
+        mercury = new THREE.Mesh(mercuryGeometry, mercuryMaterial);
+        mercury.position.set(radius, 0, 0);
+        mercury.receiveShadow = true;
+        mercury.castShadow = true;
+
+        let mercuryOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        mercuryOrbit.rotation.x = -Math.PI / 2;
+        scene.add(mercuryOrbit);
+        mercuryParent = new THREE.Group();
+        mercuryParent.add(mercury);
+        scene.add(mercuryParent);
+    }
+
+    function createVenus() {
+        const radius = 450;
+        const venusGeometry = new THREE.SphereGeometry(24.7, 80, 80);
+        const venusMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/venus_bg.jpg')});
+        venus = new THREE.Mesh(venusGeometry, venusMaterial);
+        venus.position.set(radius, 0, 0);
+        venus.receiveShadow = true;
+        venus.castShadow = true;
+
+        let venusOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        venusOrbit.rotation.x = -Math.PI / 2;
+        scene.add(venusOrbit);
+        venusParent = new THREE.Group();
+        venusParent.add(venus);
+        scene.add(venusParent);
+    }
+
+    function createEarth() {
+        const earthRadius = 700;
+        const earthGeometry = new THREE.SphereGeometry(26.3, 80, 80);
+        const earthMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/earth_bg.jpg')});
+        earth = new THREE.Mesh(earthGeometry, earthMaterial);
+        earth.position.set(earthRadius, 0, 0);
+        earth.receiveShadow = true;
+        earth.castShadow = true;
+
+        let earthOrbit = new THREE.Mesh(new THREE.RingGeometry(earthRadius - 0.25, earthRadius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        earthOrbit.rotation.x = -Math.PI / 2;
+        scene.add(earthOrbit);
+
+        const moonRadius = 60;
+        const moonGeometry = new THREE.SphereGeometry(8, 80, 80);
+        const moonMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/moon_bg.jpg')});
+        moon = new THREE.Mesh(moonGeometry, moonMaterial);
+        moon.position.set(- moonRadius, 0, 0);
+        moon.receiveShadow = true;
+        moon.castShadow = true;
+
+        let moonOrbit = new THREE.Mesh(new THREE.RingGeometry(moonRadius - 0.25, moonRadius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        moonOrbit.position.set(earthRadius, 0, 0);
+        moonOrbit.rotation.x = -Math.PI / 2;
+
+        moonParent = new THREE.Group();
+        moonParent.position.x += earthRadius;
+        moonParent.add(moon);
+
+        earthParent = new THREE.Group();
+        earthParent.add(earth);
+        earthParent.add(moonOrbit);
+        earthParent.add(moonParent);
+        scene.add(earthParent);
+    }
+
+    function createMars() {
+        const radius = 850;
+        const marsGeometry = new THREE.SphereGeometry(13.94, 80, 80);
+        const marsMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/mars_bg.jpg')});
+        mars = new THREE.Mesh(marsGeometry, marsMaterial);
+        mars.position.set(radius, 0, 0);
+        mars.receiveShadow = true;
+        mars.castShadow = true;
+
+        let marsOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        marsOrbit.rotation.x = -Math.PI / 2;
+        scene.add(marsOrbit);
+        marsParent = new THREE.Group();
+        marsParent.add(mars);
+        scene.add(marsParent);
+    }
+
+    function createJupiter() {
+        const radius = 1300;
+        const jupiterGeometry = new THREE.SphereGeometry(60, 80, 80);
+        const jupiterMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/jupiter_bg.jpg')});
+        jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
+        jupiter.position.set(radius, 0, 0);
+        jupiter.receiveShadow = true;
+        jupiter.castShadow = true;
+
+        let jupiterOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        jupiterOrbit.rotation.x = -Math.PI / 2;
+        scene.add(jupiterOrbit);
+        jupiterParent = new THREE.Group();
+        jupiterParent.add(jupiter);
+        scene.add(jupiterParent);
+    }
+
+    function createSaturn() {
+        const radius = 1800;
+        const saturnGeometry = new THREE.SphereGeometry(54, 80, 80);
+        const saturnMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/saturn_bg.jpg')});
+        saturn = new THREE.Mesh(saturnGeometry, saturnMaterial);
+        saturn.position.set(radius, 0, 0);
+        saturn.receiveShadow = true;
+        saturn.castShadow = true;
+
+        let saturnOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        saturnOrbit.rotation.x = -Math.PI / 2;
+        scene.add(saturnOrbit);
+
+        let saturnRing = new THREE.Mesh(new THREE.RingGeometry(54 * 1.2, 54 * 1.7, 300, 1), new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/saturn_ring.jpg')}));
+        saturnRing.rotation.x = -Math.PI / 2.15;
+        saturnRing.position.set(radius, 0, 0);
+
+        saturnParent = new THREE.Group();
+        saturnParent.add(saturn);
+        saturnParent.add(saturnRing);
+        scene.add(saturnParent);
+    }
+
+    function createUranus() {
+        const radius = 2600;
+        const uranusGeometry = new THREE.SphereGeometry(40, 80, 80);
+        const uranusMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/uranus_bg.jpg')});
+        uranus = new THREE.Mesh(uranusGeometry, uranusMaterial);
+        uranus.position.set(radius, 0, 0);
+        uranus.receiveShadow = true;
+        uranus.castShadow = true;
+
+        let uranusOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        uranusOrbit.rotation.x = -Math.PI / 2;
+        scene.add(uranusOrbit);
+        uranusParent = new THREE.Group();
+        uranusParent.add(uranus);
+        scene.add(uranusParent);
+    }
+
+    function createNeptune() {
+        const radius = 3200;
+        const neptuneGeometry = new THREE.SphereGeometry(35, 80, 80);
+        const neptuneMaterial = new THREE.MeshLambertMaterial({map: THREE.ImageUtils.loadTexture('../assets/textures/solar/neptune_bg.jpg')});
+        neptune = new THREE.Mesh(neptuneGeometry, neptuneMaterial);
+        neptune.position.set(radius, 0, 0);
+        neptune.receiveShadow = true;
+        neptune.castShadow = true;
+
+        let neptuneOrbit = new THREE.Mesh(new THREE.RingGeometry(radius - 0.25, radius + 0.25, 300, 1), new THREE.MeshBasicMaterial({side: THREE.DoubleSide}));
+        neptuneOrbit.rotation.x = -Math.PI / 2;
+        scene.add(neptuneOrbit);
+        neptuneParent = new THREE.Group();
+        neptuneParent.add(neptune);
+        scene.add(neptuneParent);
+    }
+
+    function createBelt() {
+        const geom = new THREE.Geometry();
+        const material = new THREE.PointCloudMaterial({
+            size: 0.1,
+            transparent: false,
+            opacity: 0.7,
+            vertexColors: false,
+            sizeAttenuation: true,
+            color: 0xffffff
+        });
+
+
+        const range = 100;
+        const radiusMin = 1000;
+        for (let i = 0; i < 500; i++) {
+            let r = Math.random() * range + radiusMin;
+            let theta = Math.random() * Math.PI * 2;
+            let particle = new THREE.Vector3(r * Math.sin(theta), Math.random() * range, r * Math.cos(theta));
+            geom.vertices.push(particle);
+        }
+
+        belt = new THREE.PointCloud(geom, material);
+        scene.add(belt);
+    }
+
+    function createSolar() {
+        createSun();
+        createMercury();
+        createVenus();
+        createEarth();
+        createMars();
+        createJupiter();
+        createSaturn();
+        createUranus();
+        createNeptune();
+        createBelt();
+    }
+
+    function rotate() {
+        sun.rotation.y += time / 50;
+        mercury.rotation.y += time / 58;
+        mercuryParent.rotation.y += time / 8.7;
+        venus.rotation.y += time / 72;
+        venusParent.rotation.y += time / 22.4;
+        earth.rotation.y += time;
+        earthParent.rotation.y += time / 36.5;
+        moon.rotation.y += time / 27;
+        moonParent.rotation.y += time / 27;
+        mars.rotation.y += time / 0.97;
+        marsParent.rotation.y += time / 68.6;
+        jupiter.rotation.y += time / 0.416;
+        jupiterParent.rotation.y += time / 120;
+        saturn.rotation.y += time / 0.44;
+        saturnParent.rotation.y += time / 180;
+        uranus.rotation.y += time / 0.71;
+        uranusParent.rotation.y += time / 300;
+        neptune.rotation.y += time / 0.67;
+        neptuneParent.rotation.y += time / 600;
+        belt.rotation.y += time / 340;
+    }
+
+    function render() {
+        time = controls.movingSpeed / 6;
+        move = controls.stepSpeed;
+        stats.update();
+        cloud.rotation.y += time / 170;
+        rotate();
+        requestAnimationFrame(render);
+        renderer.render(scene, camera);
+        orbitControls.update();
+        window.addEventListener('resize', onResize, false);
+        window.addEventListener('keydown', onKeyDown, false);
+        if (cameraMode) {
+            let lookLocate = new THREE.PointCloud(new THREE.SphereGeometry(0.1), new THREE.PointCloudMaterial({color: 0x000000}));
+            lookLocate.position.x = body.position.x - 50;
+            lookLocate.position.y = body.position.y + 50;
+            lookLocate.position.z = body.position.z + 50;
+            camera.position.copy(lookLocate.position);
+            camera.lookAt(body.position);
+        }
+    }
+
+    function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onKeyDown(event) {
+        switch (event.keyCode) {
+            case 65:
+                movePerson(-10 * move, 0, 0);
+                break;
+            case 87:
+                movePerson(0, 0, -10 * move);
+                break;
+            case 68:
+                movePerson(10 * move, 0, 0);
+                break;
+            case 83:
+                movePerson(0, 0, 10 * move);
+                break;
+            case 74:
+                movePerson(0, 10 * move, 0);
+                break;
+            case 75:
+                movePerson(0, -10 * move, 0);
+                break;
+        }
+    }
+
+    window.onload = init;
+
+</script>
+</body>
+</html>
